@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Калькулятор площі вентиляції</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mu:#6a7686;--bd:#dde2e9;--ac:#1f6feb;--acx:#fff;--ok:#0f7b4a;--box-sizing:border-box;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181d;--card:#1d232b;--tx:#e8ecf1;--mu:#93a0b0;--bd:#2d3641;--ac:#4c8dff;--acx:#0b1220;--ok:#4cc38a}}
+:root[data-theme="dark"]{--bg:#14181d;--card:#1d232b;--tx:#e8ecf1;--mu:#93a0b0;--bd:#2d3641;--ac:#4c8dff;--acx:#0b1220;--ok:#4cc38a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu);margin:0 0 10px}
+label{display:block;font-size:13px;color:var(--mu);margin-bottom:4px}
+input,select{width:100%;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+button{font:inherit;border:0;border-radius:10px;padding:11px 16px;background:var(--ac);color:var(--acx);font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--mu);border:1px solid var(--bd);font-weight:500}
+.row{display:flex;gap:8px}
+.hint{font-size:12px;color:var(--mu);margin-top:6px}
+.err{color:#d6453d;font-size:13px;margin-top:6px;min-height:1em}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bd)}
+.item:last-child{border-bottom:0}
+.item small{display:block;color:var(--mu)}
+.item b{white-space:nowrap}
+.x{background:none;color:var(--mu);padding:4px 8px;font-size:18px}
+.total{position:sticky;bottom:0;background:var(--card);display:flex;justify-content:space-between;align-items:baseline;font-size:18px;margin-top:10px;padding-top:10px;border-top:2px solid var(--bd)}
+.total b{font-size:26px;color:var(--ok)}
+.empty{color:var(--mu);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>Площа вентиляційних елементів</h1>
+
+<div class="card">
+<h2>Додати елемент</h2>
+<label for="t">Тип</label>
+<select id="t"></select>
+<div class="grid" id="f"></div>
+<div class="err" id="fe"></div>
+<button id="add">Додати до списку</button>
+<div class="hint">Січення в мм: 300x200 — прямокутне, просто 300 — кругле.</div>
+</div>
+
+<div class="card">
+<h2>Список</h2>
+<div id="list"></div>
+<div class="total"><span>Разом по всіх позиціях, м²</span><b id="sum">0.00</b></div>
+<div class="row" style="margin-top:12px"><button class="ghost" id="cp">Копіювати</button><button class="ghost" id="clr">Очистити</button></div>
+</div>
+</main>
+
+<script>
+var T={
+pipe:{n:"Труба",f:[["s1","Січення, мм","300x200"],["l","Довжина однієї, м.п.","1.25"],["q","Кількість","1"]]},
+elbow:{n:"Коліно",f:[["s1","Січення, мм","300x200"],["a","Кут, °","90"],["r","Радіус по осі, мм (необов’язково)",""],["q","Кількість","1"]]},
+reducer:{n:"Перехід",f:[["s1","Січення 1, мм","400x300"],["s2","Січення 2, мм","300x200"],["l","Довжина, мм","300"],["q","Кількість","1"]]},
+offset:{n:"Зміщення",f:[["s1","Січення, мм","300x200"],["o","Зсув, мм","150"],["l","Довжина, мм","400"],["q","Кількість","1"]]},
+tee:{n:"Трійник",f:[["s1","Основне січення, мм","400x300"],["l","Довжина основи, мм","600"],["s2","Відгалуження, мм","200x200"],["lb","Довжина відгалуження, мм","300"],["q","Кількість","1"]]}
+};
+var items=[];
+var $=function(i){return document.getElementById(i)};
+var P=Math.PI;
+function sec(s){
+ s=String(s||"").toLowerCase().replace(/,/g,".").replace(/[\u0445\u00d7*]/g,"x").replace(/\s+/g,"");
+ var m=s.match(/^(\d+\.?\d*)x(\d+\.?\d*)$/);
+ if(m){var a=+m[1],b=+m[2];return{p:2*(a+b)/1000,a:a,t:a+"×"+b}}
+ m=s.match(/^[\u00f8\u2300d\u0434]?(\d+\.?\d*)$/);
+ if(m){var d=+m[1];return{p:P*d/1000,a:d,t:"ø"+d}}
+ return null;
+}
+function num(v){v=parseFloat(String(v).replace(",","."));return isFinite(v)?v:NaN}
+function calc(type,v){
+ var s1=sec(v.s1),q=v.q===""||v.q==null?1:num(v.q);
+ if(!s1)return"Перевірте січення (наприклад 300x200 або ø200)";
+ if(!(q>0))return"Кількість має бути більше 0";
+ var one,txt;
+ if(type==="pipe"){var l=num(v.l);if(!(l>0))return"Вкажіть довжину";one=s1.p*l;txt="труба "+s1.t+", "+l+" м.п. × "+q+" шт"}
+ else if(type==="elbow"){var an=num(v.a);if(!(an>0&&an<=180))return"Кут від 1 до 180°";
+  var r=v.r===""||v.r==null?s1.a:num(v.r);if(!(r>0))return"Радіус має бути більше 0";
+  one=s1.p*(P*r*an/180)/1000;txt="коліно "+s1.t+", "+an+"°, "+q+" шт"}
+ else if(type==="reducer"){var s2=sec(v.s2),l2=num(v.l);if(!s2)return"Перевірте січення 2";if(!(l2>0))return"Вкажіть довжину";
+  one=(s1.p+s2.p)/2*l2/1000;txt="перехід "+s1.t+"→"+s2.t+", "+q+" шт"}
+ else if(type==="offset"){var o=num(v.o),l3=num(v.l);if(!(o>=0)||!(l3>0))return"Вкажіть зсув і довжину";
+  one=s1.p*Math.sqrt(o*o+l3*l3)/1000;txt="зміщення "+s1.t+", зсув "+o+", "+q+" шт"}
+ else{var s3=sec(v.s2),l4=num(v.l),lb=num(v.lb);if(!s3)return"Перевірте січення відгалуження";if(!(l4>0)||!(lb>0))return"Вкажіть довжини";
+  one=s1.p*l4/1000+s3.p*lb/1000;txt="трійник "+s1.t+"/"+s3.t+", "+q+" шт"}
+ return{txt:txt,area:one*q};
+}
+function renderForm(){
+ var t=$("t").value,h="";
+ T[t].f.forEach(function(f){h+='<div><label for="f_'+f[0]+'">'+f[1]+'</label><input id="f_'+f[0]+'" value="'+f[2]+'" autocomplete="off"></div>'});
+ $("f").innerHTML=h;$("fe").textContent="";
+}
+function render(){
+ var h="",sum=0;
+ items.forEach(function(it,i){sum+=it.area;h+='<div class="item"><div>'+it.txt+'</div><b>'+it.area.toFixed(2)+' м²</b><button class="x" data-i="'+i+'" aria-label="Видалити">×</button></div>'});
+ $("list").innerHTML=h||'<div class="empty">Поки порожньо</div>';
+ $("sum").textContent=sum.toFixed(2);
+}
+$("t").innerHTML=Object.keys(T).map(function(k){return'<option value="'+k+'">'+T[k].n+'</option>'}).join("");
+$("t").onchange=renderForm;
+$("add").onclick=function(){
+ var t=$("t").value,v={};
+ T[t].f.forEach(function(f){v[f[0]]=$("f_"+f[0]).value});
+ var r=calc(t,v);
+ if(typeof r==="string"){$("fe").textContent=r;return}
+ $("fe").textContent="";items.push(r);render();
+};
+$("list").onclick=function(e){var i=e.target.getAttribute("data-i");if(i!==null){items.splice(+i,1);render()}};
+$("clr").onclick=function(){items=[];render()};
+$("cp").onclick=function(){
+ var s=items.map(function(i){return i.txt+" = "+i.area.toFixed(2)+" м²"}).join("\n")+"\nРазом: "+$("sum").textContent+" м²";
+ try{navigator.clipboard.writeText(s);$("cp").textContent="Скопійовано";setTimeout(function(){$("cp").textContent="Копіювати"},1200)}catch(e){}
+};
+renderForm();render();
+</script>
+</body>
+</html>
